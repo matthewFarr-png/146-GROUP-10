@@ -37,7 +37,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Tech Stack 
 
-Next.js
+- Next.js
 - Tailwind
 - Remix
 - Solidity
