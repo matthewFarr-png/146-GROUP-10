@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Figtree, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/sonner"
 
 const publicSansHeading = Public_Sans({subsets:['latin'],variable:'--font-heading'});
 
@@ -32,7 +33,9 @@ export default function RootLayout({
       lang="en"
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", figtree.variable, publicSansHeading.variable)}
     >
-      <body className="">{children}</body>
+      <body className="">{children}
+        <Toaster />
+      </body>
     </html>
   );
 }

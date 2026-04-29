@@ -1,15 +1,29 @@
 import { ChartAreaInteractive } from '@/components/example-chart'
+import { db } from '@/db/db'
+import { bets } from '@/db/schema'
 
 
 
 
-function Chart() {
+async function Chart() {
+  const data = await db.select().from(bets)
+
+  const bet = data[0]
+
+
   return (
     <div className='w-full p-4 max-w-7xl'>
-        <h1 className="text-2xl font-bold mb-4">Sacramento St. Vs Idaho</h1>
-        <p className="text-muted-foreground pb-4">
-          Live betting odds and statistics for the upcoming game.
-        </p>
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold">{bet.title}</h1>
+          <p className="text-muted-foreground">
+            Live betting odds and statistics for the upcoming game.
+          </p>
+        </div>
+        <h2 className="text-sm text-black font-bold">
+          Time Left: 12:00 PM
+        </h2>
+      </div>
         <div className="w-full">
            <ChartAreaInteractive />
         </div>

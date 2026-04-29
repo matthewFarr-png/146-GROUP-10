@@ -1,0 +1,1 @@
+ALTER TABLE "trades" ADD COLUMN "question_id" text NOT NULL;
