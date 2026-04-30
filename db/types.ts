@@ -16,11 +16,12 @@ export type Bet = {
   createdAt: Date
 }
 
+
 export type Trade = {
   id: number
   userId: number
   betId: number
-  side: string 
-  amount: string
+  side: string
+  amount: number
   createdAt: Date
 }

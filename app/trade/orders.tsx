@@ -34,6 +34,7 @@ function Orders({ data }: OrdersProps) {
   }   catch (err) {
       toast.error('Failed to place trade')
     }
+    setAmount('')
     toast.success('Trade placed successfully', { position: "top-center" })
 
 

@@ -28,58 +28,12 @@ import {
 
 export const description = "An interactive area chart"
 
-const chartData = [
-  { date: "2024-06-30T00:00:00", value: 142 },
-  { date: "2024-06-30T00:05:00", value: 378 },
-  { date: "2024-06-30T00:10:00", value: 95 },
-  { date: "2024-06-30T00:15:00", value: 410 },
-  { date: "2024-06-30T00:20:00", value: 267 },
-  { date: "2024-06-30T00:25:00", value: 333 },
-  { date: "2024-06-30T00:30:00", value: 121 },
-  { date: "2024-06-30T00:35:00", value: 489 },
-  { date: "2024-06-30T00:40:00", value: 210 },
-  { date: "2024-06-30T00:45:00", value: 356 },
-  { date: "2024-06-30T00:50:00", value: 178 },
-  { date: "2024-06-30T00:55:00", value: 402 },
-  { date: "2024-06-30T01:00:00", value: 289 },
-  { date: "2024-06-30T01:05:00", value: 134 },
-  { date: "2024-06-30T01:10:00", value: 365 },
-  { date: "2024-06-30T01:15:00", value: 222 },
-  { date: "2024-06-30T01:20:00", value: 497 },
-  { date: "2024-06-30T01:25:00", value: 310 },
-  { date: "2024-06-30T01:30:00", value: 88 },
-  { date: "2024-06-30T01:35:00", value: 276 },
-  { date: "2024-06-30T01:40:00", value: 415 },
-  { date: "2024-06-30T01:45:00", value: 199 },
-  { date: "2024-06-30T01:50:00", value: 342 },
-  { date: "2024-06-30T01:55:00", value: 153 },
-  { date: "2024-06-30T02:00:00", value: 468 },
-  { date: "2024-06-30T02:05:00", value: 231 },
-  { date: "2024-06-30T02:10:00", value: 384 },
-  { date: "2024-06-30T02:15:00", value: 120 },
-  { date: "2024-06-30T02:20:00", value: 259 },
-  { date: "2024-06-30T02:25:00", value: 430 },
-  { date: "2024-06-30T02:30:00", value: 167 },
-  { date: "2024-06-30T02:35:00", value: 398 },
-  { date: "2024-06-30T02:40:00", value: 284 },
-  { date: "2024-06-30T02:45:00", value: 91 },
-  { date: "2024-06-30T02:50:00", value: 360 },
-  { date: "2024-06-30T02:55:00", value: 248 },
-  { date: "2024-06-30T03:00:00", value: 479 },
-  { date: "2024-06-30T03:05:00", value: 305 },
-  { date: "2024-06-30T03:10:00", value: 140 },
-  { date: "2024-06-30T03:15:00", value: 270 },
-  { date: "2024-06-30T03:20:00", value: 420 },
-  { date: "2024-06-30T03:25:00", value: 185 },
-  { date: "2024-06-30T03:30:00", value: 350 },
-  { date: "2024-06-30T03:35:00", value: 160 },
-  { date: "2024-06-30T03:40:00", value: 495 },
-  { date: "2024-06-30T03:45:00", value: 240 },
-  { date: "2024-06-30T03:50:00", value: 375 },
-  { date: "2024-06-30T03:55:00", value: 130 },
-  { date: "2024-06-30T04:00:00", value: 265 },
-  { date: "2024-06-30T04:05:00", value: 440 },
-]
+type ChartPoint = {
+  time: string
+  yes: number
+  no: number
+}
+
 const chartConfig = {
   visitors: {
     label: "Visitors",
@@ -94,22 +48,10 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export function ChartAreaInteractive() {
+export function ChartAreaInteractive({ chartData, betNames }: { chartData: ChartPoint[]; betNames: [string, string] }) {
   const [timeRange, setTimeRange] = React.useState("90d")
 
-  const filteredData = chartData.filter((item) => {
-    const date = new Date(item.date)
-    const referenceDate = new Date("2024-06-30")
-    let daysToSubtract = 90
-    if (timeRange === "30d") {
-      daysToSubtract = 30
-    } else if (timeRange === "7d") {
-      daysToSubtract = 7
-    }
-    const startDate = new Date(referenceDate)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-    return date >= startDate
-  })
+const filteredData = chartData.slice(-50)
 
   return (
     <Card className="pt-0">
@@ -173,41 +115,51 @@ export function ChartAreaInteractive() {
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={32}
-              tickFormatter={(value) => {
-                const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })
-              }}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })
-                  }}
-                  indicator="dot"
-                />
-              }
-            />
-                    <Area
-                    dataKey="value"
-                    type="natural"
-                    stroke="#00f5ff"
-                    strokeWidth={2}
-                    fill="url(#neon)"
+
+              <XAxis
+                dataKey="time"
+                tickFormatter={(value) => {
+                  const date = new Date(value)
+
+                  if (date.getSeconds() % 30 !== 0) return ""
+
+                  return date.toLocaleTimeString("en-US", {
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                }}
+              />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(value) =>
+                        new Date(value).toLocaleTimeString("en-US", {
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })
+                      }
+                      indicator="dot"
                     />
+                  }
+                />
+              <Area
+                dataKey="yes"
+                name={betNames[0]}
+                type="natural"
+                stroke="#00f5ff"
+                strokeWidth={2}
+                fill="url(#fillYes)"
+              />
+
+              <Area
+                dataKey="no"
+                name={betNames[1]}
+                type="natural"
+                stroke="#ff00ff"
+                strokeWidth={2}
+                fill="url(#fillNo)"
+              />
             <ChartLegend content={<ChartLegendContent />} />
           </AreaChart>
         </ChartContainer>

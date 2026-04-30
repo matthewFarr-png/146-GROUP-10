@@ -1,6 +1,9 @@
 import { ChartAreaInteractive } from '@/components/example-chart'
 import { db } from '@/db/db'
-import { bets } from '@/db/schema'
+import { bets, trades } from '@/db/schema'
+import { Trade } from '@/db/types'
+import { generateBettingChart } from '@/lib/algorithm'
+import { LiveChart } from './liveChart'
 
 
 
@@ -9,7 +12,7 @@ async function Chart() {
   const data = await db.select().from(bets)
 
   const bet = data[0]
-
+  
 
   return (
     <div className='w-full p-4 max-w-7xl'>
@@ -25,7 +28,7 @@ async function Chart() {
         </h2>
       </div>
         <div className="w-full">
-           <ChartAreaInteractive />
+          <LiveChart betId={bet.id} betNames={[bet.optionA, bet.optionB]} />
         </div>
     </div>
   )
