@@ -3,7 +3,7 @@ import { defineConfig } from 'drizzle-kit';
 import dotenv from 'dotenv';
 
 
-
+//updated
 dotenv.config({ path: '.env.local' });
 
 export default defineConfig({
@@ -15,3 +15,4 @@ export default defineConfig({
   },
 });
 
+ 
