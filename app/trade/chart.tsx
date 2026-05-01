@@ -23,9 +23,9 @@ async function Chart() {
             Live betting odds and statistics for the upcoming game.
           </p>
         </div>
-        <h2 className="text-sm text-black font-bold">
+        {/* <h2 className="text-sm text-black font-bold">
           Time Left: 12:00 PM
-        </h2>
+        </h2> */}
       </div>
         <div className="w-full">
           <LiveChart betId={bet.id} betNames={[bet.optionA, bet.optionB]} />
