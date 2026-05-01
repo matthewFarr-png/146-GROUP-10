@@ -1,0 +1,1130 @@
+<!-- AUTHOR: KYLE VALDEZ -->
+<!-- Polymarket-style decentralized prediction market UI -->
+<!-- Covers: ConnectWallet, Markets, PlaceBet, Portfolio/Holdings, Withdraw, Account, Admin (CreateMarket/CloseMarket/SubmitResult/DisburseReward) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlockBet — Decentralized Prediction Market</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* AUTHOR: KYLE VALDEZ */
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+
+    /* Page routing */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Modal overlay */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+
+    /* Probability bar */
+    .prob-bar { height: 6px; border-radius: 3px; background: #e5e7eb; overflow: hidden; }
+    .prob-fill-yes { height: 100%; background: #16c784; border-radius: 3px 0 0 3px; transition: width 0.4s; }
+    .prob-fill-no  { height: 100%; background: #ff6b6b; border-radius: 0 3px 3px 0; float: right; transition: width 0.4s; }
+
+    /* Nav active */
+    .nav-item { cursor: pointer; padding: 6px 14px; border-radius: 8px; font-size: 14px; color: #6b7280; transition: background .15s, color .15s; }
+    .nav-item:hover { background: #f3f4f6; color: #111; }
+    .nav-item.active { background: #f3f4f6; color: #111; font-weight: 600; }
+
+    /* Outcome badge */
+    .badge-open    { background:#dbeafe; color:#1d4ed8; }
+    .badge-closed  { background:#fef3c7; color:#92400e; }
+    .badge-resolved{ background:#d1fae5; color:#065f46; }
+
+    /* Wallet button */
+    .wallet-btn-connected { background: #f0fdf4; border: 1.5px solid #16c784; color: #065f46; }
+
+    /* Tab underline */
+    .tab-btn { cursor:pointer; padding: 8px 0; font-size:14px; color:#6b7280; border-bottom:2px solid transparent; margin-right:24px; }
+    .tab-btn.active { color:#111; border-bottom-color:#111; font-weight:600; }
+
+    /* Approval banner */
+    .approval-banner { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:14px 18px; }
+
+    /* Spinner for "waiting" state */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width:18px; height:18px; border:2px solid #e5e7eb; border-top-color:#6366f1; border-radius:50%; animation: spin .7s linear infinite; display:inline-block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:#f1f1f1; } ::-webkit-scrollbar-thumb { background:#d1d5db; border-radius:3px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+<!-- ═══════════════════════════════════════════════
+     HEADER  — AUTHOR: KYLE VALDEZ
+     Wallet connect lives here; shows truncated address when connected.
+════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 bg-white border-b border-gray-200">
+  <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
+
+    <!-- Logo -->
+    <div class="flex items-center gap-2 cursor-pointer" onclick="showPage('markets')">
+      <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">B</div>
+      <span class="font-semibold text-base tracking-tight">BlockBet</span>
+    </div>
+
+    <!-- Nav -->
+    <nav class="hidden md:flex items-center gap-1">
+      <span class="nav-item active" id="nav-markets" onclick="showPage('markets')">Markets</span>
+      <span class="nav-item" id="nav-portfolio" onclick="showPage('portfolio')">Portfolio</span>
+      <span class="nav-item" id="nav-account" onclick="showPage('account')">Account</span>
+      <span class="nav-item" id="nav-admin" onclick="showPage('admin')">Admin</span>
+    </nav>
+
+    <!-- Wallet connect — AUTHOR: KYLE VALDEZ -->
+    <div class="flex items-center gap-2">
+      <button id="wallet-btn" onclick="connectWallet()"
+        class="px-4 py-1.5 rounded-full text-sm font-medium border border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors">
+        Connect Wallet
+      </button>
+      <div id="wallet-badge" class="hidden wallet-btn-connected px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 cursor-pointer" onclick="showPage('account')">
+        <span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+        <span id="wallet-address-short">0x0000…0000</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: MARKETS  — AUTHOR: KYLE VALDEZ
+     Polymarket-style market cards with prob bars, volume, status badges.
+════════════════════════════════════════════════ -->
+<div id="page-markets" class="page active max-w-7xl mx-auto px-4 py-6">
+
+  <!-- Hero search bar -->
+  <div class="mb-6 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">Prediction Markets</h1>
+      <p class="text-gray-500 text-sm mt-0.5">Trade on the outcome of real-world events.</p>
+    </div>
+    <input type="text" placeholder="Search markets…"
+      class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+      oninput="filterMarkets(this.value)" />
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="flex gap-2 mb-5 flex-wrap">
+    <button onclick="setFilter('all',this)" class="filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-600 text-white">All</button>
+    <button onclick="setFilter('Sports',this)" class="filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">Sports</button>
+    <button onclick="setFilter('Politics',this)" class="filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">Politics</button>
+    <button onclick="setFilter('Crypto',this)" class="filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">Crypto</button>
+    <button onclick="setFilter('Other',this)" class="filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">Other</button>
+  </div>
+
+  <!-- Market grid — cards injected by JS -->
+  <div id="markets-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: MARKET DETAIL  — AUTHOR: KYLE VALDEZ
+     Chart + YES/NO trade panel + approval flow + trade history.
+════════════════════════════════════════════════ -->
+<div id="page-detail" class="page max-w-7xl mx-auto px-4 py-6">
+  <button onclick="showPage('markets')" class="text-sm text-gray-500 hover:text-gray-800 mb-4 flex items-center gap-1">
+    ← Back to Markets
+  </button>
+
+  <div class="flex flex-col lg:flex-row gap-6">
+
+    <!-- Left: chart + info -->
+    <div class="flex-1">
+      <div class="flex items-start gap-3 mb-4">
+        <div id="detail-icon" class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">🏀</div>
+        <div>
+          <h1 id="detail-title" class="text-xl font-bold leading-tight">Market Title</h1>
+          <p id="detail-desc" class="text-gray-500 text-sm mt-0.5">Description</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span id="detail-badge" class="badge-open text-xs px-2 py-0.5 rounded-full font-medium">Open</span>
+            <span id="detail-volume" class="text-xs text-gray-400">Vol $0</span>
+            <span id="detail-closes" class="text-xs text-gray-400">Closes: —</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Probability display -->
+      <div class="bg-white border rounded-xl p-4 mb-4 shadow-sm">
+        <div class="flex justify-between text-sm mb-2">
+          <span class="font-semibold text-green-600" id="detail-yes-pct">65% YES</span>
+          <span class="font-semibold text-red-500"  id="detail-no-pct">35% NO</span>
+        </div>
+        <div class="prob-bar">
+          <div class="flex h-full">
+            <div class="prob-fill-yes" id="detail-yes-bar" style="width:65%"></div>
+            <div class="prob-fill-no"  id="detail-no-bar"  style="width:35%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Odds chart -->
+      <div class="bg-white border rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wide">Odds History</p>
+        <canvas id="detailChart" height="90"></canvas>
+      </div>
+    </div>
+
+    <!-- Right: trade panel — AUTHOR: KYLE VALDEZ -->
+    <div class="w-full lg:w-72 flex flex-col gap-4">
+
+      <!-- Trade card -->
+      <div class="bg-white border rounded-xl shadow-sm p-4">
+        <p class="text-sm font-semibold mb-3">Place Bet</p>
+
+        <!-- Wallet guard -->
+        <div id="trade-wallet-guard" class="text-center py-4">
+          <p class="text-xs text-gray-400 mb-2">Connect your wallet to trade</p>
+          <button onclick="connectWallet()" class="w-full py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">
+            Connect Wallet
+          </button>
+        </div>
+
+        <!-- Trade form (hidden until wallet connected) — PlaceBet -->
+        <div id="trade-form" class="hidden">
+          <div class="flex gap-2 mb-3">
+            <button id="yes-btn" onclick="selectOutcome('YES')"
+              class="flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors">
+              YES <span class="text-green-600 text-xs" id="yes-price">65¢</span>
+            </button>
+            <button id="no-btn" onclick="selectOutcome('NO')"
+              class="flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors">
+              NO <span class="text-red-500 text-xs" id="no-price">35¢</span>
+            </button>
+          </div>
+
+          <label class="text-xs text-gray-500 font-medium">Amount (USD)</label>
+          <input id="bet-amount" type="number" min="1" placeholder="$0.00"
+            class="w-full border rounded-lg px-3 py-2 mt-1 mb-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            oninput="updateBetPreview()" />
+
+          <!-- Estimated payout preview -->
+          <div class="text-xs text-gray-400 mb-3">
+            Est. payout: <span id="est-payout" class="font-medium text-gray-700">—</span>
+            &nbsp;·&nbsp; Potential profit: <span id="est-profit" class="font-medium text-green-600">—</span>
+          </div>
+
+          <!-- User approval for each bet — AUTHOR: KYLE VALDEZ -->
+          <div id="approval-section" class="approval-banner mb-3 hidden">
+            <p class="text-xs font-semibold text-amber-800 mb-1">Wallet Approval Required</p>
+            <p class="text-xs text-amber-700">Your wallet will prompt you to approve this transaction before it is submitted to the blockchain.</p>
+          </div>
+
+          <button onclick="submitBet()" id="bet-btn"
+            class="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled>
+            Place Bet
+          </button>
+
+          <!-- Waiting state — AUTHOR: KYLE VALDEZ -->
+          <div id="bet-waiting" class="hidden text-center py-3">
+            <div class="spinner mx-auto mb-2"></div>
+            <p class="text-xs text-gray-500">Waiting for wallet confirmation…</p>
+          </div>
+
+          <!-- Result claimed state -->
+          <div id="bet-success" class="hidden text-center py-3 text-green-600 text-sm font-medium">
+            ✓ Bet placed successfully!
+          </div>
+        </div>
+      </div>
+
+      <!-- Market info box -->
+      <div class="bg-white border rounded-xl shadow-sm p-4 text-xs text-gray-500 space-y-2">
+        <div class="flex justify-between"><span>Category</span><span id="info-category" class="font-medium text-gray-800">—</span></div>
+        <div class="flex justify-between"><span>Volume</span><span id="info-volume" class="font-medium text-gray-800">—</span></div>
+        <div class="flex justify-between"><span>Liquidity</span><span id="info-liq" class="font-medium text-gray-800">—</span></div>
+        <div class="flex justify-between"><span>Closes</span><span id="info-closes" class="font-medium text-gray-800">—</span></div>
+        <div class="flex justify-between"><span>Status</span><span id="info-status" class="font-medium text-gray-800">—</span></div>
+      </div>
+
+      <!-- Claim reward button (shown for resolved markets) — DisburseReward -->
+      <div id="claim-section" class="hidden bg-green-50 border border-green-200 rounded-xl p-4">
+        <p class="text-sm font-semibold text-green-800 mb-1">Market Resolved!</p>
+        <p class="text-xs text-green-700 mb-3">Winner: <span id="claim-winner" class="font-bold">YES</span>. If you bet correctly, claim your reward below.</p>
+        <button onclick="claimReward()" class="w-full py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700">
+          Claim Reward (DisburseReward)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade history table -->
+  <div class="mt-6 bg-white border rounded-xl shadow-sm p-4">
+    <p class="text-sm font-semibold mb-3">Recent Trades</p>
+    <table class="w-full text-xs">
+      <thead><tr class="text-gray-400 border-b">
+        <th class="text-left pb-2">User</th>
+        <th class="text-left pb-2">Outcome</th>
+        <th class="text-left pb-2">Amount</th>
+        <th class="text-right pb-2">Time</th>
+      </tr></thead>
+      <tbody id="detail-history"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: PORTFOLIO / HOLDINGS  — AUTHOR: KYLE VALDEZ
+     Shows open bets, resolved positions, P&L, and withdraw button.
+════════════════════════════════════════════════ -->
+<div id="page-portfolio" class="page max-w-5xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold">Portfolio</h1>
+    <!-- Withdraw button — AUTHOR: KYLE VALDEZ -->
+    <button onclick="openWithdraw()" class="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 flex items-center gap-1.5">
+      ↑ Withdraw
+    </button>
+  </div>
+
+  <!-- Wallet guard -->
+  <div id="portfolio-guard" class="text-center py-16">
+    <p class="text-gray-400 mb-3">Connect your wallet to view your portfolio.</p>
+    <button onclick="connectWallet()" class="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Connect Wallet</button>
+  </div>
+
+  <!-- Portfolio content (hidden until connected) -->
+  <div id="portfolio-content" class="hidden">
+    <!-- Summary cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div class="bg-white border rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Portfolio Value</p>
+        <p class="text-xl font-bold">$342.50</p>
+      </div>
+      <div class="bg-white border rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Total Invested</p>
+        <p class="text-xl font-bold">$280.00</p>
+      </div>
+      <div class="bg-white border rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Profit / Loss</p>
+        <p class="text-xl font-bold text-green-600">+$62.50</p>
+      </div>
+      <div class="bg-white border rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Open Positions</p>
+        <p class="text-xl font-bold">3</p>
+      </div>
+    </div>
+
+    <!-- Tab navigation -->
+    <div class="border-b border-gray-200 mb-4 flex">
+      <span class="tab-btn active" id="tab-open" onclick="switchPortfolioTab('open')">Open Bets</span>
+      <span class="tab-btn" id="tab-resolved" onclick="switchPortfolioTab('resolved')">Resolved</span>
+      <span class="tab-btn" id="tab-history" onclick="switchPortfolioTab('history')">History</span>
+    </div>
+
+    <!-- Open bets tab -->
+    <div id="ptab-open">
+      <div class="space-y-3" id="open-bets-list"></div>
+    </div>
+
+    <!-- Resolved tab -->
+    <div id="ptab-resolved" class="hidden">
+      <div class="space-y-3" id="resolved-bets-list"></div>
+    </div>
+
+    <!-- History tab -->
+    <div id="ptab-history" class="hidden">
+      <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
+        <table class="w-full text-sm">
+          <thead><tr class="bg-gray-50 text-gray-500 text-xs">
+            <th class="text-left px-4 py-3">Market</th>
+            <th class="text-left px-4 py-3">Outcome</th>
+            <th class="text-left px-4 py-3">Amount</th>
+            <th class="text-left px-4 py-3">Result</th>
+            <th class="text-right px-4 py-3">Date</th>
+          </tr></thead>
+          <tbody id="history-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: ACCOUNT  — AUTHOR: KYLE VALDEZ
+     Wallet info, balance, connected network, settings.
+════════════════════════════════════════════════ -->
+<div id="page-account" class="page max-w-2xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold mb-5">Account</h1>
+
+  <!-- Not connected -->
+  <div id="account-guard" class="text-center py-16">
+    <p class="text-gray-400 mb-3">Connect your wallet to view account details.</p>
+    <button onclick="connectWallet()" class="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Connect Wallet</button>
+  </div>
+
+  <!-- Account content -->
+  <div id="account-content" class="hidden space-y-4">
+
+    <!-- Wallet card — AUTHOR: KYLE VALDEZ -->
+    <div class="bg-white border rounded-xl shadow-sm p-5">
+      <div class="flex items-center justify-between mb-4">
+        <p class="font-semibold text-sm">Wallet</p>
+        <button onclick="disconnectWallet()" class="text-xs text-red-500 hover:underline">Disconnect</button>
+      </div>
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-lg">🦊</div>
+        <div>
+          <p class="text-sm font-medium" id="acct-address">0x0000…0000</p>
+          <p class="text-xs text-gray-400" id="acct-network">Ethereum Mainnet (Chain 1)</p>
+        </div>
+        <span class="ml-auto px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">Connected</span>
+      </div>
+      <div class="border-t pt-3 grid grid-cols-2 gap-3">
+        <div>
+          <p class="text-xs text-gray-400">ETH Balance</p>
+          <p class="text-base font-semibold" id="acct-eth">2.41 ETH</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">USDC Balance</p>
+          <p class="text-base font-semibold" id="acct-usdc">$487.30</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- User approval settings — AUTHOR: KYLE VALDEZ -->
+    <div class="bg-white border rounded-xl shadow-sm p-5">
+      <p class="font-semibold text-sm mb-3">Approval Settings</p>
+      <p class="text-xs text-gray-500 mb-4">Control how your wallet approves bets and deposits. Each transaction will prompt your wallet for a signature.</p>
+      <div class="space-y-3">
+        <label class="flex items-center justify-between">
+          <span class="text-sm">Require approval for each bet</span>
+          <input type="checkbox" class="w-4 h-4 accent-indigo-600" checked id="pref-bet-approval" />
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-sm">Require approval for deposits</span>
+          <input type="checkbox" class="w-4 h-4 accent-indigo-600" checked id="pref-dep-approval" />
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-sm">Show transaction preview</span>
+          <input type="checkbox" class="w-4 h-4 accent-indigo-600" checked />
+        </label>
+      </div>
+    </div>
+
+    <!-- Deposit / Withdraw buttons — AUTHOR: KYLE VALDEZ -->
+    <div class="flex gap-3">
+      <button onclick="openDeposit()" class="flex-1 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Deposit</button>
+      <button onclick="openWithdraw()" class="flex-1 py-2.5 rounded-lg border border-gray-300 text-sm font-semibold hover:bg-gray-50">Withdraw</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: ADMIN  — AUTHOR: KYLE VALDEZ
+     CreateMarket, CloseMarket, SubmitResult, DisburseReward
+════════════════════════════════════════════════ -->
+<div id="page-admin" class="page max-w-4xl mx-auto px-4 py-6">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="text-2xl font-bold">Admin Panel</h1>
+    <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-medium">Admin Only</span>
+  </div>
+  <p class="text-sm text-gray-500 mb-6">Manage markets, submit results, and disburse rewards on-chain.</p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+    <!-- CreateMarket — AUTHOR: KYLE VALDEZ -->
+    <div class="bg-white border rounded-xl shadow-sm p-5">
+      <h2 class="font-semibold text-base mb-1">Create Market</h2>
+      <p class="text-xs text-gray-400 mb-4">Deploys a new prediction market to the smart contract.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-500 font-medium">Market Question</label>
+          <input id="new-market-title" type="text" placeholder="Will X happen by date Y?"
+            class="w-full border rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 font-medium">Description</label>
+          <textarea id="new-market-desc" rows="2" placeholder="Provide context…"
+            class="w-full border rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 font-medium">Category</label>
+            <select id="new-market-cat" class="w-full border rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <option>Sports</option><option>Politics</option><option>Crypto</option><option>Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-medium">Close Date</label>
+            <input id="new-market-date" type="date" class="w-full border rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+        </div>
+        <!-- Approval notice for admin — AUTHOR: KYLE VALDEZ -->
+        <div class="approval-banner">
+          <p class="text-xs text-amber-800 font-semibold">Wallet Transaction Required</p>
+          <p class="text-xs text-amber-700 mt-0.5">Creating a market sends a transaction to the smart contract (CreateMarket). Your wallet will prompt for approval.</p>
+        </div>
+        <button onclick="adminCreateMarket()" class="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+          Deploy Market (CreateMarket)
+        </button>
+      </div>
+    </div>
+
+    <!-- Manage Existing Markets — CloseMarket + SubmitResult — AUTHOR: KYLE VALDEZ -->
+    <div class="bg-white border rounded-xl shadow-sm p-5">
+      <h2 class="font-semibold text-base mb-1">Manage Markets</h2>
+      <p class="text-xs text-gray-400 mb-4">Close a market and submit the winning outcome.</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-500 font-medium">Select Market</label>
+          <select id="admin-market-select" class="w-full border rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          </select>
+        </div>
+
+        <!-- CloseMarket — AUTHOR: KYLE VALDEZ -->
+        <button onclick="adminCloseMarket()" class="w-full py-2 rounded-lg border border-amber-400 text-amber-700 text-sm font-semibold hover:bg-amber-50">
+          Close Market (CloseMarket)
+        </button>
+
+        <div class="border-t pt-3">
+          <label class="text-xs text-gray-500 font-medium">Submit Result (SubmitResult)</label>
+          <div class="flex gap-2 mt-2">
+            <button id="result-yes" onclick="selectResult('YES')"
+              class="flex-1 py-2 rounded-lg border text-sm font-medium border-gray-200 hover:border-green-400 hover:bg-green-50">
+              YES Wins
+            </button>
+            <button id="result-no" onclick="selectResult('NO')"
+              class="flex-1 py-2 rounded-lg border text-sm font-medium border-gray-200 hover:border-red-400 hover:bg-red-50">
+              NO Wins
+            </button>
+          </div>
+          <button onclick="adminSubmitResult()" class="w-full mt-2 py-2 rounded-lg bg-gray-800 text-white text-sm font-semibold hover:bg-gray-900">
+            Submit Result
+          </button>
+        </div>
+
+        <!-- DisburseReward — AUTHOR: KYLE VALDEZ -->
+        <div class="border-t pt-3">
+          <label class="text-xs text-gray-500 font-medium block mb-2">Disburse Rewards (DisburseReward)</label>
+          <p class="text-xs text-gray-400 mb-2">Triggers the smart contract to calculate and distribute winnings to all eligible bettors.</p>
+          <button onclick="adminDisburse()" class="w-full py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700">
+            Disburse Rewards
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin activity log -->
+  <div class="mt-5 bg-white border rounded-xl shadow-sm p-5">
+    <p class="text-sm font-semibold mb-3">Activity Log</p>
+    <div id="admin-log" class="space-y-1.5 text-xs text-gray-500 font-mono">
+      <p class="text-gray-300 italic">No recent activity.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: WITHDRAW  — AUTHOR: KYLE VALDEZ
+     User enters amount; shows wallet approval step.
+════════════════════════════════════════════════ -->
+<div id="modal-withdraw" class="modal-overlay" onclick="closeModal('modal-withdraw')">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold">Withdraw Funds</h2>
+      <button onclick="closeModal('modal-withdraw')" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">Withdraw USDC from your BlockBet balance to your connected wallet.</p>
+    <label class="text-xs text-gray-500 font-medium">Amount (USDC)</label>
+    <input id="withdraw-amount" type="number" placeholder="0.00" min="1"
+      class="w-full border rounded-lg px-3 py-2 mt-1 mb-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+    <p class="text-xs text-gray-400 mb-4">Available: <span class="font-medium text-gray-700">$487.30</span></p>
+
+    <!-- Approval step — AUTHOR: KYLE VALDEZ -->
+    <div class="approval-banner mb-4">
+      <p class="text-xs font-semibold text-amber-800">Wallet Approval Required</p>
+      <p class="text-xs text-amber-700 mt-0.5">Your wallet will prompt you to sign this withdrawal transaction.</p>
+    </div>
+
+    <button onclick="submitWithdraw()" class="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+      Confirm Withdrawal
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: DEPOSIT  — AUTHOR: KYLE VALDEZ
+════════════════════════════════════════════════ -->
+<div id="modal-deposit" class="modal-overlay" onclick="closeModal('modal-deposit')">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold">Deposit Funds</h2>
+      <button onclick="closeModal('modal-deposit')" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">Deposit USDC to your BlockBet account to start trading.</p>
+    <label class="text-xs text-gray-500 font-medium">Amount (USDC)</label>
+    <input id="deposit-amount" type="number" placeholder="0.00" min="1"
+      class="w-full border rounded-lg px-3 py-2 mt-1 mb-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+    <div class="approval-banner mb-4 mt-3">
+      <p class="text-xs font-semibold text-amber-800">Wallet Approval Required</p>
+      <p class="text-xs text-amber-700 mt-0.5">Your wallet will prompt you to approve the USDC transfer to the smart contract.</p>
+    </div>
+    <button onclick="submitDeposit()" class="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+      Confirm Deposit
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: APPROVAL CONFIRM  — AUTHOR: KYLE VALDEZ
+     Shown when wallet "approval" is pending.
+════════════════════════════════════════════════ -->
+<div id="modal-approval" class="modal-overlay">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xs mx-4 p-6 text-center">
+    <div class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-2xl mx-auto mb-3">🦊</div>
+    <h2 class="font-semibold mb-1" id="approval-title">Confirm Transaction</h2>
+    <p class="text-xs text-gray-400 mb-4" id="approval-desc">Please confirm this transaction in your wallet.</p>
+    <div class="spinner mx-auto mb-4"></div>
+    <p class="text-xs text-gray-400">Waiting for wallet signature…</p>
+    <!-- Simulated confirm for demo -->
+    <button onclick="simulateApproval()" class="mt-4 w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600">
+      Simulate Approve (Demo)
+    </button>
+    <button onclick="closeModal('modal-approval')" class="mt-2 w-full py-2 rounded-lg border text-sm text-gray-500 hover:bg-gray-50">
+      Cancel
+    </button>
+  </div>
+</div>
+
+<!-- Toast notification — AUTHOR: KYLE VALDEZ -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white opacity-0 transition-all duration-300 pointer-events-none max-w-xs">
+  Message
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     JAVASCRIPT  — AUTHOR: KYLE VALDEZ
+════════════════════════════════════════════════ -->
+<script>
+// AUTHOR: KYLE VALDEZ — State & mock data
+
+let walletConnected = false;
+let walletAddress   = '';
+let currentPage     = 'markets';
+let selectedOutcome = null;
+let selectedResult  = null;
+let activeApprovalCallback = null;
+let currentFilter   = 'all';
+let detailChart     = null;
+
+// Mock market data representing on-chain markets — AUTHOR: KYLE VALDEZ
+const markets = [
+  { id:1, icon:'🏀', title:'Sacramento Kings win the NBA Championship 2026', desc:'Will the Kings take the title this season?', category:'Sports',   yesP:65, volume:'$124,300', liq:'$32,100', closes:'2026-06-20', status:'open',     trades: genTrades('Sacramento Kings','Idaho Vandals') },
+  { id:2, icon:'🗳️', title:'Democratic candidate wins California Governor 2026', desc:'General election outcome prediction.', category:'Politics', yesP:72, volume:'$88,000',  liq:'$21,500', closes:'2026-11-03', status:'open',     trades: genTrades('Candidate A','Candidate B') },
+  { id:3, icon:'₿',  title:'Bitcoin above $150,000 by end of 2026', desc:'BTC/USD spot price on Dec 31, 2026.', category:'Crypto',   yesP:48, volume:'$210,500', liq:'$67,800', closes:'2026-12-31', status:'open',     trades: genTrades('Yes','No') },
+  { id:4, icon:'⚽',  title:'CSUS Hornets win the Big Sky Conference',          desc:'Men\'s soccer conference championship.', category:'Sports',   yesP:38, volume:'$9,200',   liq:'$2,400',  closes:'2026-05-30', status:'closed',   trades: genTrades('Hornets','Rival') },
+  { id:5, icon:'🎓',  title:'Remote work policy extended at CSUS',              desc:'University continues fully remote Fridays.', category:'Other', yesP:55, volume:'$4,100',   liq:'$1,100',  closes:'2026-08-01', status:'open',     trades: genTrades('Yes','No') },
+  { id:6, icon:'🏈',  title:'Super Bowl LXI played in Las Vegas',               desc:'Venue announcement confirmed.', category:'Sports',   yesP:90, volume:'$52,000',  liq:'$14,000', closes:'2027-02-01', status:'resolved', winner:'YES', trades: genTrades('Yes','No') },
+];
+
+// My mock portfolio bets — AUTHOR: KYLE VALDEZ
+const myBets = [
+  { market:'Sacramento Kings win NBA 2026', outcome:'YES', amount:50,  shares:76.9,  currentValue:58.0,  status:'open'    },
+  { market:'Bitcoin above $150k',           outcome:'NO',  amount:30,  shares:62.5,  currentValue:28.5,  status:'open'    },
+  { market:'Super Bowl LXI in Las Vegas',   outcome:'YES', amount:100, shares:111.1, currentValue:110.0, status:'resolved', win:true,  payout:110.0 },
+  { market:'CSUS Hornets Big Sky',          outcome:'YES', amount:20,  shares:52.6,  currentValue:0,     status:'resolved', win:false, payout:0    },
+];
+
+// Helpers
+function genTrades(a, b) {
+  const names = ['user_42','user_17','user_88','user_5','user_23','user_91'];
+  return Array.from({length:6}, (_,i) => ({
+    user: names[i % names.length],
+    outcome: i%2===0 ? a : b,
+    amount: '$' + (Math.floor(Math.random()*200)+10),
+    time: (i*7+3) + 'm ago'
+  }));
+}
+
+function fmt(n) { return n.toFixed(2); }
+
+// AUTHOR: KYLE VALDEZ — Toast
+function toast(msg, color='bg-gray-900') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white transition-all duration-300 max-w-xs ${color}`;
+  t.style.opacity = '1';
+  setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+// AUTHOR: KYLE VALDEZ — Page routing
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  currentPage = name;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  if (name === 'markets')   renderMarkets();
+  if (name === 'portfolio') renderPortfolio();
+  if (name === 'account')   renderAccount();
+  if (name === 'admin')     renderAdmin();
+}
+
+// AUTHOR: KYLE VALDEZ — Wallet connect (mocked, represents MetaMask/EIP-1193)
+function connectWallet() {
+  walletAddress = '0x' + Math.random().toString(16).slice(2,6).toUpperCase() + '…' + Math.random().toString(16).slice(2,6).toUpperCase();
+  walletConnected = true;
+  document.getElementById('wallet-btn').classList.add('hidden');
+  const badge = document.getElementById('wallet-badge');
+  badge.classList.remove('hidden');
+  badge.classList.add('flex');
+  document.getElementById('wallet-address-short').textContent = walletAddress;
+  // Show trade form
+  document.getElementById('trade-wallet-guard').classList.add('hidden');
+  document.getElementById('trade-form').classList.remove('hidden');
+  // Show portfolio/account content
+  document.getElementById('portfolio-guard')?.classList.add('hidden');
+  document.getElementById('portfolio-content')?.classList.remove('hidden');
+  document.getElementById('account-guard')?.classList.add('hidden');
+  document.getElementById('account-content')?.classList.remove('hidden');
+  document.getElementById('acct-address').textContent = walletAddress;
+  toast('Wallet connected!', 'bg-green-600');
+}
+
+function disconnectWallet() {
+  walletConnected = false;
+  walletAddress = '';
+  document.getElementById('wallet-btn').classList.remove('hidden');
+  document.getElementById('wallet-badge').classList.add('hidden');
+  document.getElementById('wallet-badge').classList.remove('flex');
+  document.getElementById('trade-wallet-guard').classList.remove('hidden');
+  document.getElementById('trade-form').classList.add('hidden');
+  document.getElementById('portfolio-guard')?.classList.remove('hidden');
+  document.getElementById('portfolio-content')?.classList.add('hidden');
+  document.getElementById('account-guard')?.classList.remove('hidden');
+  document.getElementById('account-content')?.classList.add('hidden');
+  toast('Wallet disconnected.', 'bg-gray-700');
+}
+
+// AUTHOR: KYLE VALDEZ — Modal helpers
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openWithdraw() { openModal('modal-withdraw'); }
+function openDeposit()  { openModal('modal-deposit'); }
+
+// AUTHOR: KYLE VALDEZ — Approval flow (simulates MetaMask wallet popup)
+function requestApproval(title, desc, onApprove) {
+  document.getElementById('approval-title').textContent = title;
+  document.getElementById('approval-desc').textContent  = desc;
+  activeApprovalCallback = onApprove;
+  openModal('modal-approval');
+}
+
+function simulateApproval() {
+  closeModal('modal-approval');
+  if (activeApprovalCallback) {
+    activeApprovalCallback();
+    activeApprovalCallback = null;
+  }
+}
+
+// AUTHOR: KYLE VALDEZ — Markets page
+let currentSearch = '';
+function filterMarkets(q) { currentSearch = q.toLowerCase(); renderMarkets(); }
+
+function setFilter(cat, btn) {
+  currentFilter = cat;
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    c.className = 'filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200';
+  });
+  btn.className = 'filter-chip px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-600 text-white';
+  renderMarkets();
+}
+
+function renderMarkets() {
+  const grid = document.getElementById('markets-grid');
+  let list = markets.filter(m => {
+    const matchCat = currentFilter === 'all' || m.category === currentFilter;
+    const matchQ   = !currentSearch || m.title.toLowerCase().includes(currentSearch);
+    return matchCat && matchQ;
+  });
+  grid.innerHTML = list.map(m => `
+    <div onclick="openDetail(${m.id})" class="bg-white border rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer">
+      <div class="flex items-start gap-2 mb-3">
+        <span class="text-2xl">${m.icon}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold leading-snug line-clamp-2">${m.title}</p>
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${
+              m.status==='open' ? 'badge-open' : m.status==='closed' ? 'badge-closed' : 'badge-resolved'
+            }">${m.status.charAt(0).toUpperCase()+m.status.slice(1)}</span>
+            <span class="text-xs text-gray-400">${m.category}</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-between text-xs mb-1.5">
+        <span class="font-semibold text-green-600">${m.yesP}% YES</span>
+        <span class="font-semibold text-red-500">${100-m.yesP}% NO</span>
+      </div>
+      <div class="prob-bar mb-3">
+        <div class="flex h-full">
+          <div class="prob-fill-yes" style="width:${m.yesP}%"></div>
+          <div class="prob-fill-no"  style="width:${100-m.yesP}%"></div>
+        </div>
+      </div>
+      <div class="flex justify-between text-xs text-gray-400">
+        <span>Vol ${m.volume}</span>
+        <span>Closes ${m.closes}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// AUTHOR: KYLE VALDEZ — Market detail page (Choose Market)
+function openDetail(id) {
+  const m = markets.find(x => x.id === id);
+  showPage('detail');
+  document.getElementById('page-detail').classList.add('active');
+  document.getElementById('page-markets').classList.remove('active');
+  document.getElementById('detail-icon').textContent   = m.icon;
+  document.getElementById('detail-title').textContent  = m.title;
+  document.getElementById('detail-desc').textContent   = m.desc;
+  document.getElementById('detail-badge').textContent  = m.status.charAt(0).toUpperCase()+m.status.slice(1);
+  document.getElementById('detail-badge').className    = `text-xs px-2 py-0.5 rounded-full font-medium ${m.status==='open'?'badge-open':m.status==='closed'?'badge-closed':'badge-resolved'}`;
+  document.getElementById('detail-volume').textContent = 'Vol ' + m.volume;
+  document.getElementById('detail-closes').textContent = 'Closes: ' + m.closes;
+  document.getElementById('detail-yes-pct').textContent= m.yesP + '% YES';
+  document.getElementById('detail-no-pct').textContent = (100-m.yesP) + '% NO';
+  document.getElementById('detail-yes-bar').style.width= m.yesP + '%';
+  document.getElementById('detail-no-bar').style.width = (100-m.yesP) + '%';
+  document.getElementById('yes-price').textContent = m.yesP + '¢';
+  document.getElementById('no-price').textContent  = (100-m.yesP) + '¢';
+  document.getElementById('info-category').textContent = m.category;
+  document.getElementById('info-volume').textContent   = m.volume;
+  document.getElementById('info-liq').textContent      = m.liq;
+  document.getElementById('info-closes').textContent   = m.closes;
+  document.getElementById('info-status').textContent   = m.status;
+
+  // Show claim section for resolved markets — ClaimOutcomeResult / DisburseReward
+  const claimSection = document.getElementById('claim-section');
+  if (m.status === 'resolved') {
+    claimSection.classList.remove('hidden');
+    document.getElementById('claim-winner').textContent = m.winner || 'YES';
+  } else {
+    claimSection.classList.add('hidden');
+  }
+
+  // Disable trade form for closed/resolved markets
+  const betBtn = document.getElementById('bet-btn');
+  if (m.status !== 'open') {
+    betBtn.disabled = true;
+    betBtn.textContent = 'Market Closed';
+  } else {
+    betBtn.textContent = 'Place Bet';
+  }
+
+  // Render trade history
+  document.getElementById('detail-history').innerHTML = m.trades.map(t => `
+    <tr class="border-b border-gray-50">
+      <td class="py-2 text-gray-600">${t.user}</td>
+      <td class="py-2"><span class="font-medium ${t.outcome.includes('Yes')||t.outcome.includes('YES')||t.outcome===m.trades[0].outcome?'text-green-600':'text-red-500'}">${t.outcome}</span></td>
+      <td class="py-2">${t.amount}</td>
+      <td class="py-2 text-right text-gray-400">${t.time}</td>
+    </tr>
+  `).join('');
+
+  // Draw odds history chart
+  if (detailChart) detailChart.destroy();
+  const labels = ['10d','9d','8d','7d','6d','5d','4d','3d','2d','1d','now'];
+  const base = m.yesP;
+  const yesData = labels.map((_,i) => Math.max(5, Math.min(95, base + (Math.random()-0.48)*8*(i/5))));
+  yesData[yesData.length-1] = base;
+  const noData  = yesData.map(v => 100-v);
+  detailChart = new Chart(document.getElementById('detailChart'), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'YES', data:yesData, borderColor:'#16c784', backgroundColor:'rgba(22,199,132,.08)', fill:true, tension:.4, pointRadius:2 },
+      { label:'NO',  data:noData,  borderColor:'#ff6b6b', backgroundColor:'rgba(255,107,107,.08)', fill:true, tension:.4, pointRadius:2 },
+    ]},
+    options:{ responsive:true, plugins:{legend:{display:false}}, scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}} }
+  });
+
+  selectedOutcome = null;
+  resetBetUI();
+}
+
+// AUTHOR: KYLE VALDEZ — YES/NO selection (PlaceBet UI)
+function selectOutcome(side) {
+  selectedOutcome = side;
+  const yb = document.getElementById('yes-btn');
+  const nb = document.getElementById('no-btn');
+  if (side === 'YES') {
+    yb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-green-500 bg-green-50 text-green-700';
+    nb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors';
+  } else {
+    nb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-red-500 bg-red-50 text-red-700';
+    yb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors';
+  }
+  updateBetPreview();
+  // Show approval notice per user preference — AUTHOR: KYLE VALDEZ
+  const approvalPref = document.getElementById('pref-bet-approval');
+  if (approvalPref && approvalPref.checked) {
+    document.getElementById('approval-section').classList.remove('hidden');
+  }
+}
+
+function updateBetPreview() {
+  const amount = parseFloat(document.getElementById('bet-amount').value) || 0;
+  const btn    = document.getElementById('bet-btn');
+  if (amount > 0 && selectedOutcome) {
+    btn.disabled = false;
+    const price  = selectedOutcome === 'YES' ? 0.65 : 0.35;
+    const payout = amount / price;
+    const profit = payout - amount;
+    document.getElementById('est-payout').textContent = '$' + fmt(payout);
+    document.getElementById('est-profit').textContent = '+$' + fmt(profit);
+  } else {
+    btn.disabled = true;
+    document.getElementById('est-payout').textContent = '—';
+    document.getElementById('est-profit').textContent = '—';
+  }
+}
+
+// AUTHOR: KYLE VALDEZ — PlaceBet: triggers wallet approval then confirms
+function submitBet() {
+  if (!walletConnected) { connectWallet(); return; }
+  const amount = parseFloat(document.getElementById('bet-amount').value);
+  if (!amount || !selectedOutcome) return;
+
+  requestApproval(
+    'Approve Bet Transaction',
+    `You are placing a $${amount} bet on ${selectedOutcome}. This will be sent to the PlaceBet smart contract function.`,
+    () => {
+      // Show waiting state — AUTHOR: KYLE VALDEZ
+      document.getElementById('bet-waiting').classList.remove('hidden');
+      document.getElementById('bet-btn').classList.add('hidden');
+      setTimeout(() => {
+        document.getElementById('bet-waiting').classList.add('hidden');
+        document.getElementById('bet-success').classList.remove('hidden');
+        toast('Bet placed! Tx confirmed.', 'bg-green-600');
+        setTimeout(() => { resetBetUI(); }, 3000);
+      }, 1800);
+    }
+  );
+}
+
+function resetBetUI() {
+  document.getElementById('bet-amount').value = '';
+  document.getElementById('bet-waiting').classList.add('hidden');
+  document.getElementById('bet-success').classList.add('hidden');
+  document.getElementById('bet-btn').classList.remove('hidden');
+  document.getElementById('bet-btn').disabled = true;
+  document.getElementById('approval-section').classList.add('hidden');
+  document.getElementById('est-payout').textContent = '—';
+  document.getElementById('est-profit').textContent = '—';
+  const yb = document.getElementById('yes-btn');
+  const nb = document.getElementById('no-btn');
+  yb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors';
+  nb.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors';
+}
+
+// AUTHOR: KYLE VALDEZ — Claim Outcome Result / DisburseReward
+function claimReward() {
+  if (!walletConnected) { connectWallet(); return; }
+  requestApproval(
+    'Claim Reward',
+    'This calls DisburseReward on the smart contract to send your winnings to your wallet.',
+    () => { toast('Reward claimed! Funds sent to your wallet.', 'bg-green-600'); }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Portfolio rendering
+function renderPortfolio() {
+  if (!walletConnected) return;
+  const openList     = document.getElementById('open-bets-list');
+  const resolvedList = document.getElementById('resolved-bets-list');
+  const histBody     = document.getElementById('history-table-body');
+
+  const open     = myBets.filter(b => b.status === 'open');
+  const resolved = myBets.filter(b => b.status === 'resolved');
+
+  openList.innerHTML = open.map(b => `
+    <div class="bg-white border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-medium">${b.market}</p>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-xs px-1.5 py-0.5 rounded font-medium ${b.outcome==='YES'?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}">${b.outcome}</span>
+          <span class="text-xs text-gray-400">${b.shares.toFixed(1)} shares</span>
+        </div>
+      </div>
+      <div class="text-right">
+        <p class="text-sm font-semibold">$${fmt(b.currentValue)}</p>
+        <p class="text-xs ${b.currentValue>=b.amount?'text-green-600':'text-red-500'}">${b.currentValue>=b.amount?'+':''}$${fmt(b.currentValue-b.amount)}</p>
+      </div>
+    </div>
+  `).join('');
+
+  resolvedList.innerHTML = resolved.map(b => `
+    <div class="bg-white border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-medium">${b.market}</p>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-xs px-1.5 py-0.5 rounded font-medium ${b.outcome==='YES'?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}">${b.outcome}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded font-medium ${b.win?'bg-emerald-100 text-emerald-700':'bg-gray-100 text-gray-500'}">${b.win?'Won':'Lost'}</span>
+        </div>
+      </div>
+      <div class="text-right flex flex-col items-end gap-1">
+        <p class="text-sm font-semibold ${b.win?'text-green-600':'text-gray-500'}">${b.win?'+$'+fmt(b.payout):'-$'+fmt(b.amount)}</p>
+        ${b.win ? `<button onclick="claimReward()" class="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700">Claim</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  histBody.innerHTML = myBets.map(b => `
+    <tr class="border-b border-gray-50 text-sm">
+      <td class="px-4 py-3 text-gray-700">${b.market}</td>
+      <td class="px-4 py-3"><span class="font-medium ${b.outcome==='YES'?'text-green-600':'text-red-500'}">${b.outcome}</span></td>
+      <td class="px-4 py-3">$${fmt(b.amount)}</td>
+      <td class="px-4 py-3">${b.status==='open'?'<span class="badge-open text-xs px-1.5 py-0.5 rounded-full">Open</span>':(b.win?'<span class="badge-resolved text-xs px-1.5 py-0.5 rounded-full">Won</span>':'<span class="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Lost</span>')}</td>
+      <td class="px-4 py-3 text-right text-gray-400 text-xs">2026-04-${10+myBets.indexOf(b)}</td>
+    </tr>
+  `).join('');
+}
+
+function switchPortfolioTab(tab) {
+  ['open','resolved','history'].forEach(t => {
+    document.getElementById('ptab-'+t).classList.toggle('hidden', t!==tab);
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+// AUTHOR: KYLE VALDEZ — Account page
+function renderAccount() {
+  if (!walletConnected) return;
+  document.getElementById('acct-address').textContent = walletAddress;
+}
+
+// AUTHOR: KYLE VALDEZ — Withdraw flow
+function submitWithdraw() {
+  const amt = document.getElementById('withdraw-amount').value;
+  if (!amt) { toast('Enter an amount.', 'bg-red-600'); return; }
+  closeModal('modal-withdraw');
+  requestApproval(
+    'Confirm Withdrawal',
+    `Withdraw $${amt} USDC to your wallet. This calls the contract withdraw function.`,
+    () => { toast(`$${amt} withdrawn to your wallet!`, 'bg-green-600'); }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Deposit flow
+function submitDeposit() {
+  const amt = document.getElementById('deposit-amount').value;
+  if (!amt) { toast('Enter an amount.', 'bg-red-600'); return; }
+  closeModal('modal-deposit');
+  requestApproval(
+    'Approve Deposit',
+    `Deposit $${amt} USDC to BlockBet. This calls the contract PlaceDeposit function.`,
+    () => { toast(`$${amt} deposited!`, 'bg-green-600'); }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Admin: populate market select
+function renderAdmin() {
+  const sel = document.getElementById('admin-market-select');
+  sel.innerHTML = markets.map(m => `<option value="${m.id}">${m.title.substring(0,55)}…</option>`).join('');
+}
+
+// AUTHOR: KYLE VALDEZ — Admin: CreateMarket
+function adminCreateMarket() {
+  const title = document.getElementById('new-market-title').value.trim();
+  const desc  = document.getElementById('new-market-desc').value.trim();
+  if (!title) { toast('Enter a market question.', 'bg-red-600'); return; }
+  requestApproval(
+    'Deploy Market',
+    `CreateMarket("${title}") will be sent to the smart contract. Gas fees apply.`,
+    () => {
+      const newM = {
+        id: markets.length+1, icon:'🆕', title, desc,
+        category: document.getElementById('new-market-cat').value,
+        yesP:50, volume:'$0', liq:'$0',
+        closes: document.getElementById('new-market-date').value || '2026-12-31',
+        status:'open', trades: genTrades('YES','NO')
+      };
+      markets.push(newM);
+      addAdminLog(`CreateMarket: "${title.substring(0,40)}…"`);
+      toast('Market deployed!', 'bg-green-600');
+      document.getElementById('new-market-title').value = '';
+      document.getElementById('new-market-desc').value  = '';
+      renderAdmin();
+    }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Admin: CloseMarket
+function adminCloseMarket() {
+  const id  = parseInt(document.getElementById('admin-market-select').value);
+  const m   = markets.find(x=>x.id===id);
+  if (!m) return;
+  requestApproval(
+    'Close Market',
+    `CloseMarket(${id}) stops new bets on "${m.title.substring(0,40)}…".`,
+    () => {
+      m.status = 'closed';
+      addAdminLog(`CloseMarket(id=${id}): "${m.title.substring(0,40)}…"`);
+      toast('Market closed.', 'bg-amber-600');
+    }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Admin: SubmitResult
+let adminSelectedResult = null;
+function selectResult(side) {
+  adminSelectedResult = side;
+  document.getElementById('result-yes').className = `flex-1 py-2 rounded-lg border text-sm font-medium ${side==='YES'?'border-green-500 bg-green-50 text-green-700':'border-gray-200 hover:border-green-400 hover:bg-green-50'}`;
+  document.getElementById('result-no').className  = `flex-1 py-2 rounded-lg border text-sm font-medium ${side==='NO' ?'border-red-500 bg-red-50 text-red-700':'border-gray-200 hover:border-red-400 hover:bg-red-50'}`;
+}
+
+function adminSubmitResult() {
+  if (!adminSelectedResult) { toast('Select a winning outcome.','bg-red-600'); return; }
+  const id = parseInt(document.getElementById('admin-market-select').value);
+  const m  = markets.find(x=>x.id===id);
+  if (!m) return;
+  requestApproval(
+    'Submit Result',
+    `SubmitResult(${id}, "${adminSelectedResult}") marks the winner on-chain.`,
+    () => {
+      m.status = 'resolved';
+      m.winner = adminSelectedResult;
+      addAdminLog(`SubmitResult(id=${id}, winner=${adminSelectedResult})`);
+      toast(`Result submitted: ${adminSelectedResult} wins.`, 'bg-green-600');
+    }
+  );
+}
+
+// AUTHOR: KYLE VALDEZ — Admin: DisburseReward
+function adminDisburse() {
+  const id = parseInt(document.getElementById('admin-market-select').value);
+  const m  = markets.find(x=>x.id===id);
+  if (!m) return;
+  requestApproval(
+    'Disburse Rewards',
+    `DisburseReward(${id}) will calculate and send USDC to all winning bettors.`,
+    () => {
+      addAdminLog(`DisburseReward(id=${id}): rewards sent to all winners.`);
+      toast('Rewards disbursed!', 'bg-green-600');
+    }
+  );
+}
+
+function addAdminLog(msg) {
+  const log = document.getElementById('admin-log');
+  const p   = document.createElement('p');
+  p.className = 'text-gray-600';
+  const now = new Date();
+  p.textContent = `[${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}] ${msg}`;
+  if (log.querySelector('.italic')) log.innerHTML = '';
+  log.prepend(p);
+}
+
+// AUTHOR: KYLE VALDEZ — Init
+renderMarkets();
+renderAdmin();
+</script>
+</body>
+</html>
