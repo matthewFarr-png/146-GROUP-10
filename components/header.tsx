@@ -1,24 +1,41 @@
-import { Button } from "@/components/ui/button"
+'use client'
 import Link from "next/link"
+import { ConnectWalletButton } from "./metaMaskBtn"
+import { MetaMaskProvider } from "@metamask/sdk-react"
+import { Button } from "./ui/button"
+
+
+
 
 export default function Header() {
+  const host =
+    typeof window !== "undefined" ? window.location.host : "defaultHost";
+
+  const sdkOptions = {
+    logging: { developerMode: false },
+    checkInstallationImmediately: false,
+    dappMetadata: {
+      name: "Next-Metamask-Boilerplate",
+      url: host, // using the host constant defined above
+    },
+  };
   return (
     <header className="w-full border-b bg-white">
-      <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
-        
-        {/* Logo */}
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/">
-          <h1 className="text-xl font-semibold tracking-tight">
-            BlockBet
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">BlockBet</h1>
         </Link>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Button variant="outline">Login</Button>
-          <Button>Sign Up</Button>
-        </div>
-
+      <div className="flex gap-4 px-6">
+        <MetaMaskProvider debug={false} sdkOptions={sdkOptions}>
+        <ConnectWalletButton />
+        </MetaMaskProvider>
+        <Link href={'/account'}>
+        <Button>
+          Account
+        </Button>
+        </Link>
+      </div>
       </div>
     </header>
   )

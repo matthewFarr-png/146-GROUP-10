@@ -9,13 +9,12 @@ import {
 } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").defaultRandom().primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   status: text("status").default("user"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 })
-
 
 export const bets = pgTable("bets", {
   id: serial("id").primaryKey(),
@@ -25,13 +24,13 @@ export const bets = pgTable("bets", {
   totalPool: numeric("total_pool").default("0"),
   winner: text("winner"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  closesAt: timestamp("closes_at"),
 })
 
 export const trades = pgTable("trades", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
+
+  userId: text("user_id"),
   betId: integer("bet_id")
     .references(() => bets.id)
     .notNull(),

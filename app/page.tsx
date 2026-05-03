@@ -1,21 +1,52 @@
-import Header from "@/components/header";
-import { Button } from "@/components/ui/button";
-import Image from "next/image";
-import Link from "next/link";
+import Header from "@/components/header"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { db } from "@/db/db"
+import { bets } from "@/db/schema"
+import Link from "next/link"
+import MarketMiniChart from "./trade/marketChart"
 
-export default function Home() {
+
+
+export default async function Home() {
+  const markets = await db.select().from(bets)
+
+
+
   return (
-    <div>
+    <div className="min-h-screen bg-zinc-50 dark:bg-black">
       <Header />
-          <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <h1 className="text-4xl">Sac State Decentralized Betting Platform</h1>
-      <div className="py-4">
-      <Link href="/trade">
-        <Button>Get Started!</Button>
-      </Link>
-      </div>
-    </div>
 
+      <main className="max-w-7xl mx-auto px-6 py-10 h-full">
+        <div className="flex flex-col items-start justify-start h-full">
+          
+          <h1 className="text-4xl font-bold text-left mb-8 text-zinc-900 dark:text-white">
+            Live Markets
+          </h1>
+
+          <div className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {markets.map((market) => (
+              <Link key={market.id} href={`/trade/${market.id}`}>
+                <Card className="cursor-pointer transition hover:shadow-md hover:scale-[1.01] h-full">
+                  <CardHeader>
+                    <CardTitle>{market.title}</CardTitle>
+                  </CardHeader>
+
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">
+                      {market.createdAt.toDateString()}
+                    </p>
+                    <MarketMiniChart
+                      betId={market.id}
+                      betNames={[market.optionA, market.optionB]}
+                    />
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+
+        </div>
+      </main>
     </div>
-  );
+  )
 }

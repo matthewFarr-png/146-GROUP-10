@@ -1,4 +1,5 @@
-'use client'
+"use client"
+
 import {
   Table,
   TableBody,
@@ -7,46 +8,61 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useState } from "react"
-import useSWR from 'swr'
-import {Trade} from '@/db/types'
 
+import useSWR from "swr"
+import { Trade } from "@/db/types"
+import { formatAddress } from "@/lib/tools"
 
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
+function History({ betId }: { betId: number }) {
+  const { data, isLoading } = useSWR(
+    `/api/history?betId=${betId}`,
+    fetcher,
+    {
+      refreshInterval: 5000,
+    }
+  )
 
+  const trades: Trade[] = data?.data ?? []
 
-function History() {
-
-    const [history, setHistory] = useState([])
-    const { data } = useSWR('/api/history', url => fetch(url).then(r => r.json()), {
-    refreshInterval: 5000,
-    })
-    const trades: Trade[] = data?.data ?? []
-
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground mt-4">Loading history...</p>
+  }
 
   return (
-    <div className="max-w-4xl mx-auto py-4">
-        <div>
-            <h2 className="text-md font-semibold">Trade History</h2>
-        <Table>
-            <TableHeader>
-                <TableRow>
-                <TableHead className="w-[100px]">User Id</TableHead>
-                <TableHead className="w-[100px]">Trade</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+    <div className="w-full py-4">
+      <h2 className="text-md font-semibold mb-2">Trade History</h2>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>User</TableHead>
+            <TableHead>Trade</TableHead>
+            <TableHead className="text-right">Amount</TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
           {trades.map((trade) => (
             <TableRow key={trade.id}>
-              <TableCell className="font-medium">{trade.userId}</TableCell>
-              <TableCell className="text-right">{trade.side}</TableCell>
-              <TableCell className="text-right">${trade.amount}</TableCell>
+              <TableCell>{formatAddress(trade.userId)}</TableCell>
+              <TableCell>{trade.side}</TableCell>
+              <TableCell className="text-right">
+                ${Number(trade.amount).toFixed(2)}
+              </TableCell>
             </TableRow>
           ))}
-            </TableBody>
-            </Table>
-    </div>
+
+          {trades.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={3} className="text-center text-sm text-muted-foreground">
+                No trades yet
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   )
 }

@@ -22,6 +22,41 @@
       "when": 1777500747054,
       "tag": "0002_thankful_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777845081828,
+      "tag": "0003_ambitious_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777845437072,
+      "tag": "0004_big_black_widow",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777849219928,
+      "tag": "0005_sour_hawkeye",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777849314105,
+      "tag": "0006_swift_shinobi_shaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777849541982,
+      "tag": "0007_milky_warbird",
+      "breakpoints": true
     }
   ]
 }

@@ -56,7 +56,7 @@ export function generateBettingChart(trades: Trade[], betNames: [string, string]
 
 export default function toTrade(trade: {
   id: number
-  userId: number
+  userId: string
   betId: number
   side: string
   amount: string
@@ -68,4 +68,23 @@ export default function toTrade(trade: {
     amount: Number(trade.amount),
     createdAt: new Date(trade.createdAt),
   }
+}
+
+export function calculatePayout({
+  userBetAmount,
+  winningPool,
+  totalPool,
+}: {
+  userBetAmount: number
+  winningPool: number
+  totalPool: number
+}) {
+  const HOUSE_EDGE = 0.08
+
+  if (winningPool <= 0) return 0
+
+  const payoutPool = totalPool * (1 - HOUSE_EDGE)
+  const userShare = userBetAmount / winningPool
+
+  return Number((payoutPool * userShare).toFixed(2))
 }

@@ -1,11 +1,7 @@
-import { ChartAreaInteractive } from '@/components/example-chart'
+
 import { db } from '@/db/db'
-import { bets, trades } from '@/db/schema'
-import { Trade } from '@/db/types'
-import { generateBettingChart } from '@/lib/algorithm'
+import { bets} from '@/db/schema'
 import { LiveChart } from './liveChart'
-
-
 
 
 async function Chart() {

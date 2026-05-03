@@ -19,7 +19,7 @@ export type Bet = {
 
 export type Trade = {
   id: number
-  userId: number
+  userId: string
   betId: number
   side: string
   amount: number
